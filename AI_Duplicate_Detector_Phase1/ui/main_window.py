@@ -1,5 +1,6 @@
 
 import os
+import html
 
 from PySide6.QtCore import Qt, QSettings, Signal
 from PySide6.QtWidgets import (
@@ -1115,12 +1116,13 @@ class ResultsPage(QWidget):
         partial_description.setObjectName("Muted")
         partial_description.setWordWrap(True)
 
-        self.partial_table = QTableWidget(0, 5)
+        self.partial_table = QTableWidget(0, 6)
 
         self.partial_table.setHorizontalHeaderLabels([
             "File A",
             "File B",
             "Similarity",
+            "Classification",
             "Passages",
             "Matching Evidence"
         ])
@@ -1161,12 +1163,13 @@ class ResultsPage(QWidget):
         semantic_description.setObjectName("Muted")
         semantic_description.setWordWrap(True)
 
-        self.semantic_table = QTableWidget(0, 5)
+        self.semantic_table = QTableWidget(0, 6)
 
         self.semantic_table.setHorizontalHeaderLabels([
             "File A",
             "File B",
             "AI Similarity",
+            "Classification",
             "Passages",
             "Matching Evidence"
         ])
@@ -1358,6 +1361,7 @@ class ResultsPage(QWidget):
     # PARTIAL AND SEMANTIC RESULTS
     # -------------------------------------------------
 
+
     def display_matches(
         self,
         table,
@@ -1365,6 +1369,7 @@ class ResultsPage(QWidget):
         report,
         detection_type
     ):
+        """Populate the partial or semantic match table."""
 
         matches = report.get("matches", [])
 
@@ -1372,39 +1377,34 @@ class ResultsPage(QWidget):
         table.setRowCount(len(matches))
 
         for row, match in enumerate(matches):
-
             record_a = match["file_a"]
             record_b = match["file_b"]
-
             passages = match.get("passages", [])
+            similarity = float(match.get("similarity", 0))
 
-            evidence_lines = []
-
-            for number, passage in enumerate(
-                passages,
-                start=1
-            ):
-
-                evidence_lines.append(
-                    f"MATCH {number} ({passage['score']:.1f}%)\n\n"
-                    f"FILE A:\n{passage['text_a']}\n\n"
-                    f"FILE B:\n{passage['text_b']}"
-                )
+            if similarity >= 90:
+                classification = "High"
+            elif similarity >= 75:
+                classification = "Moderate"
+            else:
+                classification = "Low"
 
             preview = ""
-
             if passages:
-
+                first_passage = passages[0]
+                text_a = str(first_passage.get("text_a", ""))
+                text_b = str(first_passage.get("text_b", ""))
                 preview = (
-                    passages[0]["text_a"][:90]
+                    text_a[:65].replace("\n", " ")
                     + " ... "
-                    + passages[0]["text_b"][:90]
+                    + text_b[:65].replace("\n", " ")
                 )
 
             values = [
                 record_a.name,
                 record_b.name,
-                f"{match['similarity']:.1f}%",
+                f"{similarity:.1f}%",
+                classification,
                 str(len(passages)),
                 preview
             ]
@@ -1412,129 +1412,246 @@ class ResultsPage(QWidget):
             evidence_data = {
                 "file_a": record_a.path,
                 "file_b": record_b.path,
-                "text": "\n\n".join(evidence_lines),
-                "detection_type": detection_type
+                "detection_type": detection_type,
+                "similarity": similarity,
+                "classification": classification,
+                "passages": passages
             }
 
             for column, value in enumerate(values):
-
                 item = QTableWidgetItem(str(value))
 
                 if column == 0:
                     item.setToolTip(record_a.path)
-
                 elif column == 1:
                     item.setToolTip(record_b.path)
-
-                elif column == 4:
-
-                    # Store full evidence on the row item.
+                elif column == 5:
                     item.setData(
                         Qt.ItemDataRole.UserRole,
                         evidence_data
                     )
-
                     item.setToolTip(
-                        "Double-click to inspect full matching passages."
+                        "Double-click to open the side-by-side evidence viewer."
                     )
 
-                table.setItem(
-                    row,
-                    column,
-                    item
-                )
+                table.setItem(row, column, item)
 
         table.setSortingEnabled(True)
 
         if report.get("error"):
-
             empty_label.setText(
-                "AI model error: " + str(report["error"])
+                f"{detection_type} analysis error: {report['error']}"
             )
-
         elif report.get("cancelled"):
-
             empty_label.setText(
                 f"{detection_type} detection was cancelled. "
-                "Any displayed matches are partial results."
+                "The displayed matches may be partial results."
             )
-
         elif matches:
-
             empty_label.setText("")
-
         elif report.get("documents_without_text", 0) > 0:
-
             empty_label.setText(
                 f"No {detection_type.lower()} matches found. "
                 f"{report['documents_without_text']} documents "
-                "had no usable passages."
+                "had no usable text."
             )
-
         else:
-
             empty_label.setText(
                 f"No {detection_type.lower()} matches found "
                 "at the current threshold."
             )
 
-        empty_label.setVisible(
-            not bool(matches)
-        )
+        empty_label.setVisible(not bool(matches))
 
     # -------------------------------------------------
-    # VIEW MATCHING EVIDENCE
+    # SIDE-BY-SIDE MATCHING EVIDENCE VIEWER
     # -------------------------------------------------
+
+    @staticmethod
+    def make_evidence_html(text, match_number, score):
+        """Format a matched passage safely and highlight the evidence."""
+
+        safe_text = html.escape(str(text or "No passage text available."))
+        safe_score = html.escape(f"{float(score):.1f}%")
+
+        return f"""
+        <html>
+        <body style="
+            background-color:#0c1627;
+            color:#e5e7eb;
+            font-family:Segoe UI;
+            font-size:13px;
+        ">
+            <div style="
+                background-color:#17452f;
+                border:1px solid #3b8260;
+                border-radius:7px;
+                padding:10px;
+                margin-bottom:10px;
+            ">
+                <b style="color:#bbf7d0;">
+                    MATCH {match_number}
+                </b>
+                <span style="color:#bbf7d0;">
+                    &nbsp; | &nbsp; Similarity: {safe_score}
+                </span>
+            </div>
+            <div style="white-space:pre-wrap; line-height:1.5;">
+                <span style="
+                    background-color:#365d36;
+                    color:#ffffff;
+                    padding:2px;
+                ">{safe_text}</span>
+            </div>
+        </body>
+        </html>
+        """
 
     def show_evidence(self, table, row):
+        """Open the two matched passages in a side-by-side dialog."""
 
         if row < 0:
             return
 
-        evidence_item = table.item(row, 4)
-
+        # The evidence dictionary is stored in the final column (index 5).
+        evidence_item = table.item(row, 5)
         if evidence_item is None:
             return
 
-        evidence = evidence_item.data(
-            Qt.ItemDataRole.UserRole
-        )
-
+        evidence = evidence_item.data(Qt.ItemDataRole.UserRole)
         if not evidence:
             return
 
+        detection_type = evidence.get("detection_type", "Duplicate")
+        similarity = float(evidence.get("similarity", 0))
+        classification = evidence.get("classification", "Unclassified")
+        passages = evidence.get("passages", [])
+
         dialog = QDialog(self)
-
-        dialog.setWindowTitle(
-            evidence["detection_type"] + " Matching Evidence"
-        )
-
-        dialog.resize(850, 550)
+        dialog.setWindowTitle(f"{detection_type} - Detailed Evidence")
+        dialog.resize(1150, 760)
 
         layout = QVBoxLayout(dialog)
+        layout.setSpacing(12)
 
         heading = QLabel(
-            "FILE A:\n"
-            + evidence["file_a"]
-            + "\n\nFILE B:\n"
-            + evidence["file_b"]
+            f"{detection_type} comparison  |  "
+            f"Similarity: {similarity:.1f}%  |  "
+            f"Classification: {classification}"
+        )
+        heading.setObjectName("Section")
+        heading.setWordWrap(True)
+        layout.addWidget(heading)
+
+        explanation = QLabel(
+            "The highlighted blocks are the passages selected by the "
+            "detection algorithm. Similarity scores are indicators for "
+            "review; they do not prove plagiarism or establish who copied whom."
+        )
+        explanation.setObjectName("Muted")
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+
+        paths_layout = QGridLayout()
+        file_a_title = QLabel("FILE A")
+        file_b_title = QLabel("FILE B")
+        file_a_title.setObjectName("Section")
+        file_b_title.setObjectName("Section")
+
+        file_a_path = QLabel(str(evidence.get("file_a", "Unknown path")))
+        file_b_path = QLabel(str(evidence.get("file_b", "Unknown path")))
+        file_a_path.setObjectName("Muted")
+        file_b_path.setObjectName("Muted")
+        file_a_path.setWordWrap(True)
+        file_b_path.setWordWrap(True)
+
+        paths_layout.addWidget(file_a_title, 0, 0)
+        paths_layout.addWidget(file_b_title, 0, 1)
+        paths_layout.addWidget(file_a_path, 1, 0)
+        paths_layout.addWidget(file_b_path, 1, 1)
+        layout.addLayout(paths_layout)
+
+        comparison_layout = QHBoxLayout()
+        comparison_layout.setSpacing(10)
+
+        file_a_area = QTextEdit()
+        file_b_area = QTextEdit()
+        file_a_area.setReadOnly(True)
+        file_b_area.setReadOnly(True)
+        file_a_area.setMinimumHeight(400)
+        file_b_area.setMinimumHeight(400)
+        file_a_area.setAcceptRichText(True)
+        file_b_area.setAcceptRichText(True)
+
+        file_a_area.setStyleSheet(
+            "QTextEdit { background-color:#0c1627; color:#e5e7eb; "
+            "border:1px solid #3b8260; border-radius:7px; padding:8px; }"
+        )
+        file_b_area.setStyleSheet(
+            "QTextEdit { background-color:#0c1627; color:#e5e7eb; "
+            "border:1px solid #3b8260; border-radius:7px; padding:8px; }"
         )
 
-        heading.setWordWrap(True)
-        heading.setObjectName("Muted")
+        if passages:
+            parts_a = []
+            parts_b = []
 
-        text_area = QTextEdit()
-        text_area.setReadOnly(True)
-        text_area.setPlainText(evidence["text"])
+            for number, passage in enumerate(passages, start=1):
+                passage_score = float(passage.get("score", similarity))
+                text_a = passage.get("text_a", "")
+                text_b = passage.get("text_b", "")
+
+                parts_a.append(
+                    self.make_evidence_html(text_a, number, passage_score)
+                )
+                parts_b.append(
+                    self.make_evidence_html(text_b, number, passage_score)
+                )
+
+            file_a_area.setHtml(
+                "<br><hr><br>".join(parts_a)
+            )
+            file_b_area.setHtml(
+                "<br><hr><br>".join(parts_b)
+            )
+        else:
+            file_a_area.setPlainText(
+                "No matched passage evidence was included in this result."
+            )
+            file_b_area.setPlainText(
+                "No matched passage evidence was included in this result."
+            )
+
+        comparison_layout.addWidget(file_a_area, 1)
+        comparison_layout.addWidget(file_b_area, 1)
+        layout.addLayout(comparison_layout, 1)
+
+        if detection_type.lower() == "partial":
+            method_description = (
+                "Detection method: RapidFuzz text similarity. It compares "
+                "passage wording and can identify passages with similar text."
+            )
+        elif detection_type.lower() == "semantic":
+            method_description = (
+                "Detection method: Sentence Transformers semantic similarity. "
+                "It compares vector representations of passages to find "
+                "similar meaning, even when wording differs."
+            )
+        else:
+            method_description = (
+                "Detection method: exact file comparison using SHA-256 hashes."
+            )
+
+        method_label = QLabel(method_description)
+        method_label.setObjectName("Muted")
+        method_label.setWordWrap(True)
+        layout.addWidget(method_label)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Close
         )
-
         buttons.rejected.connect(dialog.accept)
-
-        layout.addWidget(heading)
-        layout.addWidget(text_area)
+        buttons.accepted.connect(dialog.accept)
         layout.addWidget(buttons)
 
         dialog.exec()
