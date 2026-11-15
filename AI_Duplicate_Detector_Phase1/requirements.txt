@@ -1,4 +1,7 @@
-pyPySide6>=6.7,<7.0
+
+PySide6>=6.7,<7.0
 rapidfuzz
 PyMuPDF
 python-docx
+send2trash
+sentence-transformers

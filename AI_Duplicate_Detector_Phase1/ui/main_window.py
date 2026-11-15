@@ -2,7 +2,7 @@
 import os
 import html
 
-from PySide6.QtCore import Qt, QSettings, Signal
+from PySide6.QtCore import Qt, QSettings, Signal, QThread
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QGridLayout,
     QLabel, QPushButton, QFrame, QStackedWidget, QFileDialog,
@@ -15,6 +15,7 @@ from core.scanner import FileScannerWorker
 from core.hash_detector import HashDetectorWorker
 from core.fuzzy_detector import FuzzyDuplicateWorker
 from core.semantic_detector import SemanticDuplicateWorker
+from core.file_manager import move_exact_duplicates_to_recycle_bin
 
 
 # =====================================================
@@ -100,6 +101,37 @@ def create_panel():
     panel = QFrame()
     panel.setObjectName("Panel")
     return panel
+
+
+# =====================================================
+# BACKGROUND FILE-MANAGEMENT WORKER
+# =====================================================
+
+class FileManagerWorker(QThread):
+    """Perform safe duplicate-file management in a background thread."""
+
+    operation_completed = Signal(object)
+    operation_failed = Signal(str)
+
+    def __init__(self, keep_path, remove_paths, expected_sha256):
+        super().__init__()
+
+        self.keep_path = keep_path
+        self.remove_paths = remove_paths
+        self.expected_sha256 = expected_sha256
+
+    def run(self):
+        try:
+            result = move_exact_duplicates_to_recycle_bin(
+                keep_path=self.keep_path,
+                remove_paths=self.remove_paths,
+                expected_sha256=self.expected_sha256
+            )
+
+            self.operation_completed.emit(result)
+
+        except Exception as error:
+            self.operation_failed.emit(str(error))
 
 
 # =====================================================
@@ -214,7 +246,7 @@ class DashboardPage(QWidget):
 
 
 # =====================================================
-# SCAN PAGE: SCANNER + SHA-256 + RAPIDFUZZ + SEMANTIC AI
+# SCAN PAGE
 # =====================================================
 
 class ScanPage(QWidget):
@@ -241,10 +273,6 @@ class ScanPage(QWidget):
         )
 
         self.build_ui()
-
-    # -------------------------------------------------
-    # BUILD INTERFACE
-    # -------------------------------------------------
 
     def build_ui(self):
 
@@ -342,7 +370,8 @@ class ScanPage(QWidget):
         layout.addWidget(self.results_table, 1)
 
         note = QLabel(
-            "All analysis runs locally. No files are modified or deleted."
+            "All analysis runs locally. No files are modified or deleted "
+            "during scanning."
         )
         note.setObjectName("Muted")
         layout.addWidget(note)
@@ -366,9 +395,7 @@ class ScanPage(QWidget):
 
         table.setAlternatingRowColors(True)
 
-    # -------------------------------------------------
     # FOLDER SELECTION
-    # -------------------------------------------------
 
     def add_folder(self):
 
@@ -430,9 +457,7 @@ class ScanPage(QWidget):
             f"{count} folder{'s' if count != 1 else ''} selected"
         )
 
-    # -------------------------------------------------
     # SETTINGS AND THREAD STATE
-    # -------------------------------------------------
 
     def setting_enabled(self, key, default=True):
 
@@ -474,9 +499,7 @@ class ScanPage(QWidget):
 
         self.cancel_button.setEnabled(not enabled)
 
-    # -------------------------------------------------
     # START SCAN
-    # -------------------------------------------------
 
     def start_scan(self):
 
@@ -557,9 +580,7 @@ class ScanPage(QWidget):
 
         self.progress_bar.setToolTip(current_path)
 
-    # -------------------------------------------------
     # CANCELLATION
-    # -------------------------------------------------
 
     def cancel_scan(self):
 
@@ -588,9 +609,7 @@ class ScanPage(QWidget):
             "Stopping current operation..."
         )
 
-    # -------------------------------------------------
     # FILE DISPLAY
-    # -------------------------------------------------
 
     @staticmethod
     def format_size(size):
@@ -639,9 +658,7 @@ class ScanPage(QWidget):
 
         self.results_table.setSortingEnabled(True)
 
-    # -------------------------------------------------
     # SCAN COMPLETE -> HASH
-    # -------------------------------------------------
 
     def scan_finished(self, report):
 
@@ -717,9 +734,7 @@ class ScanPage(QWidget):
 
         self.progress_bar.setToolTip(path)
 
-    # -------------------------------------------------
     # HASH COMPLETE -> FUZZY
-    # -------------------------------------------------
 
     def hash_finished(self, report):
 
@@ -780,9 +795,7 @@ class ScanPage(QWidget):
 
         return excluded_pairs
 
-    # -------------------------------------------------
     # RAPIDFUZZ PARTIAL DETECTION
-    # -------------------------------------------------
 
     def start_partial_detection(self):
 
@@ -831,9 +844,7 @@ class ScanPage(QWidget):
 
         self.status_label.setText(detail)
 
-    # -------------------------------------------------
     # RAPIDFUZZ COMPLETE -> SEMANTIC AI
-    # -------------------------------------------------
 
     def fuzzy_finished(self, report):
 
@@ -853,9 +864,7 @@ class ScanPage(QWidget):
 
         self.start_semantic_detection()
 
-    # -------------------------------------------------
     # REPORT BUILDERS
-    # -------------------------------------------------
 
     @staticmethod
     def empty_partial_report(
@@ -892,9 +901,7 @@ class ScanPage(QWidget):
             "model": "sentence-transformers/all-MiniLM-L6-v2"
         }
 
-    # -------------------------------------------------
     # SEMANTIC AI DETECTION
-    # -------------------------------------------------
 
     def start_semantic_detection(self):
 
@@ -936,12 +943,9 @@ class ScanPage(QWidget):
     ):
 
         if total > 0:
-
             self.progress_bar.setRange(0, total)
             self.progress_bar.setValue(processed)
-
         else:
-
             self.progress_bar.setRange(0, 0)
 
         self.status_label.setText(detail)
@@ -995,18 +999,12 @@ class ScanPage(QWidget):
             )
 
         self.analysis_ready.emit({
-
             "exact": self.exact_report,
-
             "partial": self.partial_report,
-
             "semantic": semantic_report
-
         })
 
-    # -------------------------------------------------
     # THREAD CLEANUP
-    # -------------------------------------------------
 
     def scanner_worker_finished(self):
 
@@ -1051,13 +1049,19 @@ class ScanPage(QWidget):
 
 
 # =====================================================
-# RESULTS PAGE: EXACT + PARTIAL + SEMANTIC
+# RESULTS PAGE
 # =====================================================
 
 class ResultsPage(QWidget):
 
     def __init__(self, go_to_scan):
         super().__init__()
+
+        # Phase 8 state
+        self.exact_report = None
+        self.last_report = None
+        self.exact_groups = {}
+        self.file_manager_worker = None
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
@@ -1071,9 +1075,7 @@ class ResultsPage(QWidget):
 
         self.tabs = QTabWidget()
 
-        # -------------------------------------------------
         # EXACT DUPLICATES TAB
-        # -------------------------------------------------
 
         exact_page = QWidget()
         exact_layout = QVBoxLayout(exact_page)
@@ -1090,10 +1092,37 @@ class ResultsPage(QWidget):
 
         self.configure_table(self.exact_table)
 
+        self.exact_table.itemSelectionChanged.connect(
+            self.update_exact_action_state
+        )
+
+        # Phase 8 management controls
+
+        self.exact_action_label = QLabel(
+            "Select a file from an exact duplicate group to keep."
+        )
+        self.exact_action_label.setObjectName("Muted")
+        self.exact_action_label.setWordWrap(True)
+
+        self.manage_exact_button = QPushButton(
+            "Move Other Copies to Recycle Bin"
+        )
+
+        self.manage_exact_button.setEnabled(False)
+
+        self.manage_exact_button.clicked.connect(
+            self.manage_selected_exact_group
+        )
+
+        exact_controls = QHBoxLayout()
+        exact_controls.addWidget(self.exact_action_label, 1)
+        exact_controls.addWidget(self.manage_exact_button)
+
         self.exact_empty = QLabel("No exact duplicates found.")
         self.exact_empty.setObjectName("Muted")
 
         exact_layout.addWidget(self.exact_table)
+        exact_layout.addLayout(exact_controls)
         exact_layout.addWidget(self.exact_empty)
 
         self.tabs.addTab(
@@ -1101,9 +1130,7 @@ class ResultsPage(QWidget):
             "Exact Duplicates"
         )
 
-        # -------------------------------------------------
         # PARTIAL DUPLICATES TAB
-        # -------------------------------------------------
 
         partial_page = QWidget()
         partial_layout = QVBoxLayout(partial_page)
@@ -1147,17 +1174,15 @@ class ResultsPage(QWidget):
             "Partial Duplicates"
         )
 
-        # -------------------------------------------------
         # SEMANTIC AI TAB
-        # -------------------------------------------------
 
         semantic_page = QWidget()
         semantic_layout = QVBoxLayout(semantic_page)
 
         semantic_description = QLabel(
             "Meaning-based passage matches from Sentence Transformers. "
-            "Scores are cosine similarities, not percentages of a document duplicated. "
-            "Double-click an evidence row to inspect full passages."
+            "Scores are cosine similarities, not percentages of a document "
+            "duplicated. Double-click an evidence row to inspect full passages."
         )
 
         semantic_description.setObjectName("Muted")
@@ -1194,9 +1219,7 @@ class ResultsPage(QWidget):
             "Semantic AI"
         )
 
-        # -------------------------------------------------
         # FOOTER
-        # -------------------------------------------------
 
         scan_button = QPushButton("Scan another folder")
         scan_button.clicked.connect(go_to_scan)
@@ -1239,11 +1262,193 @@ class ResultsPage(QWidget):
 
         return f"{value:.2f} PB"
 
-    # -------------------------------------------------
+    # =================================================
+    # PHASE 8: SAFE EXACT DUPLICATE MANAGEMENT
+    # =================================================
+
+    def update_exact_action_state(self):
+        """Enable management only when a duplicate file is selected."""
+
+        selected = self.exact_table.currentRow() >= 0
+
+        self.manage_exact_button.setEnabled(
+            selected and self.file_manager_worker is None
+        )
+
+    def manage_selected_exact_group(self):
+        """Keep the selected file and move other group copies to Recycle Bin."""
+
+        row = self.exact_table.currentRow()
+
+        if row < 0:
+            return
+
+        item = self.exact_table.item(row, 0)
+
+        if item is None:
+            return
+
+        selection = item.data(Qt.ItemDataRole.UserRole)
+
+        if not selection:
+            return
+
+        group_number = selection["group_number"]
+        keep_path = selection["path"]
+
+        group = self.exact_groups.get(group_number)
+
+        if not group:
+            QMessageBox.warning(
+                self,
+                "Group unavailable",
+                "This duplicate group is no longer available. "
+                "Please scan again."
+            )
+            return
+
+        remove_paths = [
+            record.path
+            for record in group["files"]
+            if os.path.normcase(os.path.abspath(record.path))
+            != os.path.normcase(os.path.abspath(keep_path))
+        ]
+
+        if not remove_paths:
+            return
+
+        file_list = "\n".join(
+            f"• {path}" for path in remove_paths
+        )
+
+        answer = QMessageBox.question(
+            self,
+            "Confirm duplicate management",
+            f"FILE TO KEEP:\n{keep_path}\n\n"
+            f"FILES TO MOVE TO RECYCLE BIN:\n{file_list}\n\n"
+            "The application will verify the SHA-256 hashes again.\n"
+            "The selected copies will be moved to the Windows "
+            "Recycle Bin, not permanently deleted.\n\n"
+            "Do you want to continue?",
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        self.exact_action_label.setText(
+            "Verifying files and moving selected copies..."
+        )
+
+        self.manage_exact_button.setEnabled(False)
+
+        self.file_manager_worker = FileManagerWorker(
+            keep_path=keep_path,
+            remove_paths=remove_paths,
+            expected_sha256=group["digest"]
+        )
+
+        self.file_manager_worker.operation_completed.connect(
+            self.handle_file_manager_result
+        )
+
+        self.file_manager_worker.operation_failed.connect(
+            self.handle_file_manager_error
+        )
+
+        self.file_manager_worker.finished.connect(
+            self.file_manager_worker_finished
+        )
+
+        self.file_manager_worker.start()
+
+    def handle_file_manager_result(self, result):
+        """Refresh duplicate results after file management."""
+
+        moved_paths = {
+            os.path.normcase(os.path.abspath(path))
+            for path in result.moved_paths
+        }
+
+        updated_groups = []
+
+        for group in self.exact_report.get("duplicate_groups", []):
+
+            remaining_files = [
+                record
+                for record in group["files"]
+                if os.path.normcase(
+                    os.path.abspath(record.path)
+                ) not in moved_paths
+            ]
+
+            if len(remaining_files) >= 2:
+                updated_groups.append({
+                    **group,
+                    "files": remaining_files
+                })
+
+        self.exact_report["duplicate_groups"] = updated_groups
+
+        if self.last_report is not None:
+            self.last_report["exact"] = self.exact_report
+            self.display_report(self.last_report)
+
+        recovered = self.format_size(result.recovered_bytes)
+
+        self.exact_action_label.setText(
+            f"Storage recovered: {recovered}"
+        )
+
+        details = (
+            f"{getattr(result, 'message', 'File operation completed.')}\n\n"
+            f"Files moved: {len(result.moved_paths)}\n"
+            f"Storage recovered: {recovered}\n"
+            f"File retained: {getattr(result, 'kept_path', 'Selected file')}"
+        )
+
+        if result.failed_paths:
+            details += (
+                "\n\nFiles that could not be moved:\n"
+                + "\n".join(result.failed_paths)
+            )
+
+        QMessageBox.information(
+            self,
+            "File management result",
+            details
+        )
+
+    def handle_file_manager_error(self, error):
+
+        self.exact_action_label.setText(
+            "File operation stopped. Review the error."
+        )
+
+        QMessageBox.warning(
+            self,
+            "File management failed",
+            error
+        )
+
+    def file_manager_worker_finished(self):
+
+        worker = self.file_manager_worker
+        self.file_manager_worker = None
+
+        if worker is not None:
+            worker.deleteLater()
+
+        self.update_exact_action_state()
+
     # DISPLAY COMBINED REPORT
-    # -------------------------------------------------
 
     def display_report(self, report):
+
+        self.last_report = report
+        self.exact_report = report["exact"]
 
         exact = report["exact"]
         partial = report["partial"]
@@ -1298,13 +1503,18 @@ class ResultsPage(QWidget):
             "Semantic"
         )
 
-    # -------------------------------------------------
     # EXACT RESULTS
-    # -------------------------------------------------
 
     def display_exact(self, report):
 
         groups = report.get("duplicate_groups", [])
+
+        self.exact_report = report
+
+        self.exact_groups = {
+            number: group
+            for number, group in enumerate(groups, start=1)
+        }
 
         total_files = sum(
             len(group["files"])
@@ -1337,6 +1547,15 @@ class ResultsPage(QWidget):
 
                     item = QTableWidgetItem(str(value))
 
+                    if column == 0:
+                        item.setData(
+                            Qt.ItemDataRole.UserRole,
+                            {
+                                "group_number": group_number,
+                                "path": record.path
+                            }
+                        )
+
                     if column == 3:
                         item.setToolTip(digest)
 
@@ -1357,10 +1576,9 @@ class ResultsPage(QWidget):
             not bool(groups)
         )
 
-    # -------------------------------------------------
-    # PARTIAL AND SEMANTIC RESULTS
-    # -------------------------------------------------
+        self.update_exact_action_state()
 
+    # PARTIAL AND SEMANTIC RESULTS
 
     def display_matches(
         self,
@@ -1369,7 +1587,6 @@ class ResultsPage(QWidget):
         report,
         detection_type
     ):
-        """Populate the partial or semantic match table."""
 
         matches = report.get("matches", [])
 
@@ -1377,6 +1594,7 @@ class ResultsPage(QWidget):
         table.setRowCount(len(matches))
 
         for row, match in enumerate(matches):
+
             record_a = match["file_a"]
             record_b = match["file_b"]
             passages = match.get("passages", [])
@@ -1390,10 +1608,13 @@ class ResultsPage(QWidget):
                 classification = "Low"
 
             preview = ""
+
             if passages:
                 first_passage = passages[0]
+
                 text_a = str(first_passage.get("text_a", ""))
                 text_b = str(first_passage.get("text_b", ""))
+
                 preview = (
                     text_a[:65].replace("\n", " ")
                     + " ... "
@@ -1419,17 +1640,21 @@ class ResultsPage(QWidget):
             }
 
             for column, value in enumerate(values):
+
                 item = QTableWidgetItem(str(value))
 
                 if column == 0:
                     item.setToolTip(record_a.path)
+
                 elif column == 1:
                     item.setToolTip(record_b.path)
+
                 elif column == 5:
                     item.setData(
                         Qt.ItemDataRole.UserRole,
                         evidence_data
                     )
+
                     item.setToolTip(
                         "Double-click to open the side-by-side evidence viewer."
                     )
@@ -1439,23 +1664,32 @@ class ResultsPage(QWidget):
         table.setSortingEnabled(True)
 
         if report.get("error"):
+
             empty_label.setText(
                 f"{detection_type} analysis error: {report['error']}"
             )
+
         elif report.get("cancelled"):
+
             empty_label.setText(
                 f"{detection_type} detection was cancelled. "
                 "The displayed matches may be partial results."
             )
+
         elif matches:
+
             empty_label.setText("")
+
         elif report.get("documents_without_text", 0) > 0:
+
             empty_label.setText(
                 f"No {detection_type.lower()} matches found. "
                 f"{report['documents_without_text']} documents "
                 "had no usable text."
             )
+
         else:
+
             empty_label.setText(
                 f"No {detection_type.lower()} matches found "
                 "at the current threshold."
@@ -1463,16 +1697,18 @@ class ResultsPage(QWidget):
 
         empty_label.setVisible(not bool(matches))
 
-    # -------------------------------------------------
     # SIDE-BY-SIDE MATCHING EVIDENCE VIEWER
-    # -------------------------------------------------
 
     @staticmethod
     def make_evidence_html(text, match_number, score):
-        """Format a matched passage safely and highlight the evidence."""
 
-        safe_text = html.escape(str(text or "No passage text available."))
-        safe_score = html.escape(f"{float(score):.1f}%")
+        safe_text = html.escape(
+            str(text or "No passage text available.")
+        )
+
+        safe_score = html.escape(
+            f"{float(score):.1f}%"
+        )
 
         return f"""
         <html>
@@ -1508,39 +1744,57 @@ class ResultsPage(QWidget):
         """
 
     def show_evidence(self, table, row):
-        """Open the two matched passages in a side-by-side dialog."""
 
         if row < 0:
             return
 
-        # The evidence dictionary is stored in the final column (index 5).
         evidence_item = table.item(row, 5)
+
         if evidence_item is None:
             return
 
-        evidence = evidence_item.data(Qt.ItemDataRole.UserRole)
+        evidence = evidence_item.data(
+            Qt.ItemDataRole.UserRole
+        )
+
         if not evidence:
             return
 
-        detection_type = evidence.get("detection_type", "Duplicate")
-        similarity = float(evidence.get("similarity", 0))
-        classification = evidence.get("classification", "Unclassified")
+        detection_type = evidence.get(
+            "detection_type",
+            "Duplicate"
+        )
+
+        similarity = float(
+            evidence.get("similarity", 0)
+        )
+
+        classification = evidence.get(
+            "classification",
+            "Unclassified"
+        )
+
         passages = evidence.get("passages", [])
 
         dialog = QDialog(self)
-        dialog.setWindowTitle(f"{detection_type} - Detailed Evidence")
+        dialog.setWindowTitle(
+            f"{detection_type} - Detailed Evidence"
+        )
+
         dialog.resize(1150, 760)
 
         layout = QVBoxLayout(dialog)
         layout.setSpacing(12)
 
         heading = QLabel(
-            f"{detection_type} comparison  |  "
-            f"Similarity: {similarity:.1f}%  |  "
+            f"{detection_type} comparison | "
+            f"Similarity: {similarity:.1f}% | "
             f"Classification: {classification}"
         )
+
         heading.setObjectName("Section")
         heading.setWordWrap(True)
+
         layout.addWidget(heading)
 
         explanation = QLabel(
@@ -1548,20 +1802,31 @@ class ResultsPage(QWidget):
             "detection algorithm. Similarity scores are indicators for "
             "review; they do not prove plagiarism or establish who copied whom."
         )
+
         explanation.setObjectName("Muted")
         explanation.setWordWrap(True)
+
         layout.addWidget(explanation)
 
         paths_layout = QGridLayout()
+
         file_a_title = QLabel("FILE A")
         file_b_title = QLabel("FILE B")
+
         file_a_title.setObjectName("Section")
         file_b_title.setObjectName("Section")
 
-        file_a_path = QLabel(str(evidence.get("file_a", "Unknown path")))
-        file_b_path = QLabel(str(evidence.get("file_b", "Unknown path")))
+        file_a_path = QLabel(
+            str(evidence.get("file_a", "Unknown path"))
+        )
+
+        file_b_path = QLabel(
+            str(evidence.get("file_b", "Unknown path"))
+        )
+
         file_a_path.setObjectName("Muted")
         file_b_path.setObjectName("Muted")
+
         file_a_path.setWordWrap(True)
         file_b_path.setWordWrap(True)
 
@@ -1569,6 +1834,7 @@ class ResultsPage(QWidget):
         paths_layout.addWidget(file_b_title, 0, 1)
         paths_layout.addWidget(file_a_path, 1, 0)
         paths_layout.addWidget(file_b_path, 1, 1)
+
         layout.addLayout(paths_layout)
 
         comparison_layout = QHBoxLayout()
@@ -1576,10 +1842,13 @@ class ResultsPage(QWidget):
 
         file_a_area = QTextEdit()
         file_b_area = QTextEdit()
+
         file_a_area.setReadOnly(True)
         file_b_area.setReadOnly(True)
+
         file_a_area.setMinimumHeight(400)
         file_b_area.setMinimumHeight(400)
+
         file_a_area.setAcceptRichText(True)
         file_b_area.setAcceptRichText(True)
 
@@ -1587,57 +1856,85 @@ class ResultsPage(QWidget):
             "QTextEdit { background-color:#0c1627; color:#e5e7eb; "
             "border:1px solid #3b8260; border-radius:7px; padding:8px; }"
         )
+
         file_b_area.setStyleSheet(
             "QTextEdit { background-color:#0c1627; color:#e5e7eb; "
             "border:1px solid #3b8260; border-radius:7px; padding:8px; }"
         )
 
         if passages:
+
             parts_a = []
             parts_b = []
 
-            for number, passage in enumerate(passages, start=1):
-                passage_score = float(passage.get("score", similarity))
+            for number, passage in enumerate(
+                passages,
+                start=1
+            ):
+
+                passage_score = float(
+                    passage.get("score", similarity)
+                )
+
                 text_a = passage.get("text_a", "")
                 text_b = passage.get("text_b", "")
 
                 parts_a.append(
-                    self.make_evidence_html(text_a, number, passage_score)
+                    self.make_evidence_html(
+                        text_a,
+                        number,
+                        passage_score
+                    )
                 )
+
                 parts_b.append(
-                    self.make_evidence_html(text_b, number, passage_score)
+                    self.make_evidence_html(
+                        text_b,
+                        number,
+                        passage_score
+                    )
                 )
 
             file_a_area.setHtml(
                 "<br><hr><br>".join(parts_a)
             )
+
             file_b_area.setHtml(
                 "<br><hr><br>".join(parts_b)
             )
+
         else:
+
             file_a_area.setPlainText(
                 "No matched passage evidence was included in this result."
             )
+
             file_b_area.setPlainText(
                 "No matched passage evidence was included in this result."
             )
 
         comparison_layout.addWidget(file_a_area, 1)
         comparison_layout.addWidget(file_b_area, 1)
+
         layout.addLayout(comparison_layout, 1)
 
         if detection_type.lower() == "partial":
+
             method_description = (
                 "Detection method: RapidFuzz text similarity. It compares "
                 "passage wording and can identify passages with similar text."
             )
+
         elif detection_type.lower() == "semantic":
+
             method_description = (
                 "Detection method: Sentence Transformers semantic similarity. "
                 "It compares vector representations of passages to find "
                 "similar meaning, even when wording differs."
             )
+
         else:
+
             method_description = (
                 "Detection method: exact file comparison using SHA-256 hashes."
             )
@@ -1645,13 +1942,16 @@ class ResultsPage(QWidget):
         method_label = QLabel(method_description)
         method_label.setObjectName("Muted")
         method_label.setWordWrap(True)
+
         layout.addWidget(method_label)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Close
         )
+
         buttons.rejected.connect(dialog.accept)
         buttons.accepted.connect(dialog.accept)
+
         layout.addWidget(buttons)
 
         dialog.exec()
@@ -1681,7 +1981,6 @@ class SettingsPage(QWidget):
         )
         description.setObjectName("Muted")
 
-        # Partial similarity
         partial_label = QLabel(
             "Partial similarity threshold"
         )
@@ -1690,7 +1989,6 @@ class SettingsPage(QWidget):
         self.partial_spin.setRange(50, 100)
         self.partial_spin.setSuffix("%")
 
-        # Semantic similarity
         semantic_label = QLabel(
             "Semantic similarity threshold"
         )
@@ -1704,7 +2002,6 @@ class SettingsPage(QWidget):
             "Tune it using labelled test documents."
         )
 
-        # Document formats
         formats_title = QLabel(
             "Supported document formats"
         )
@@ -1715,7 +2012,6 @@ class SettingsPage(QWidget):
         self.txt_check = QCheckBox("TXT")
         self.md_check = QCheckBox("MD")
 
-        # Preferences
         self.cache_check = QCheckBox(
             "Reuse cached results"
         )
@@ -1830,6 +2126,7 @@ class SettingsPage(QWidget):
                 "Choose a format",
                 "Select at least one document format."
             )
+
             return
 
         values = {
@@ -1918,12 +2215,14 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Sidebar
+        # SIDEBAR
+
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
         sidebar.setFixedWidth(220)
 
         sidebar_layout = QVBoxLayout(sidebar)
+
         sidebar_layout.setContentsMargins(
             15, 22, 15, 18
         )
@@ -1958,9 +2257,11 @@ class MainWindow(QMainWindow):
 
         privacy = QLabel("LOCAL-FIRST WORKSPACE")
         privacy.setObjectName("Muted")
+
         sidebar_layout.addWidget(privacy)
 
-        # Main content
+        # MAIN CONTENT
+
         content = QWidget()
         content_layout = QVBoxLayout(content)
 
@@ -1981,7 +2282,8 @@ class MainWindow(QMainWindow):
 
         content_layout.addLayout(header)
 
-        # Pages
+        # PAGES
+
         self.stack = QStackedWidget()
 
         self.dashboard = DashboardPage(
@@ -2006,7 +2308,6 @@ class MainWindow(QMainWindow):
         for page in self.pages.values():
             self.stack.addWidget(page)
 
-        # Connect the complete three-stage report.
         self.scan_page.analysis_ready.connect(
             self.handle_analysis_ready
         )
@@ -2016,9 +2317,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(sidebar)
         main_layout.addWidget(content)
 
-    # -------------------------------------------------
     # NAVIGATION
-    # -------------------------------------------------
 
     def navigate(self, page_name):
 
@@ -2041,9 +2340,7 @@ class MainWindow(QMainWindow):
             button.style().unpolish(button)
             button.style().polish(button)
 
-    # -------------------------------------------------
     # COMPLETE ANALYSIS RESULTS
-    # -------------------------------------------------
 
     def handle_analysis_ready(self, report):
 
