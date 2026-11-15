@@ -2,6 +2,9 @@
 import os
 import html
 
+from core.statistics_manager import StatisticsManager
+from ui.statistics_page import StatisticsPage
+
 from PySide6.QtCore import Qt, QSettings, Signal, QThread
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QGridLayout,
@@ -108,7 +111,6 @@ def create_panel():
 # =====================================================
 
 class FileManagerWorker(QThread):
-    """Perform safe duplicate-file management in a background thread."""
 
     operation_completed = Signal(object)
     operation_failed = Signal(str)
@@ -272,6 +274,7 @@ class ScanPage(QWidget):
             "Desktop"
         )
 
+        # StatisticsManager is owned by MainWindow.
         self.build_ui()
 
     def build_ui(self):
@@ -1054,10 +1057,12 @@ class ScanPage(QWidget):
 
 class ResultsPage(QWidget):
 
+    # Phase 9: report actual recovered storage to MainWindow.
+    storage_recovered = Signal(int)
+
     def __init__(self, go_to_scan):
         super().__init__()
 
-        # Phase 8 state
         self.exact_report = None
         self.last_report = None
         self.exact_groups = {}
@@ -1095,8 +1100,6 @@ class ResultsPage(QWidget):
         self.exact_table.itemSelectionChanged.connect(
             self.update_exact_action_state
         )
-
-        # Phase 8 management controls
 
         self.exact_action_label = QLabel(
             "Select a file from an exact duplicate group to keep."
@@ -1262,12 +1265,9 @@ class ResultsPage(QWidget):
 
         return f"{value:.2f} PB"
 
-    # =================================================
     # PHASE 8: SAFE EXACT DUPLICATE MANAGEMENT
-    # =================================================
 
     def update_exact_action_state(self):
-        """Enable management only when a duplicate file is selected."""
 
         selected = self.exact_table.currentRow() >= 0
 
@@ -1276,7 +1276,6 @@ class ResultsPage(QWidget):
         )
 
     def manage_selected_exact_group(self):
-        """Keep the selected file and move other group copies to Recycle Bin."""
 
         row = self.exact_table.currentRow()
 
@@ -1365,7 +1364,6 @@ class ResultsPage(QWidget):
         self.file_manager_worker.start()
 
     def handle_file_manager_result(self, result):
-        """Refresh duplicate results after file management."""
 
         moved_paths = {
             os.path.normcase(os.path.abspath(path))
@@ -1397,6 +1395,11 @@ class ResultsPage(QWidget):
             self.display_report(self.last_report)
 
         recovered = self.format_size(result.recovered_bytes)
+
+        # Phase 9: count only bytes actually recovered.
+        self.storage_recovered.emit(
+            int(result.recovered_bytes)
+        )
 
         self.exact_action_label.setText(
             f"Storage recovered: {recovered}"
@@ -2183,6 +2186,9 @@ class MainWindow(QMainWindow):
 
         self.nav_buttons = {}
 
+        # Phase 9: one shared statistics manager.
+        self.statistics_manager = StatisticsManager()
+
         self.pages_info = {
             "dashboard": (
                 "Dashboard",
@@ -2195,6 +2201,10 @@ class MainWindow(QMainWindow):
             "results": (
                 "Results",
                 "Review exact, partial and semantic duplicate evidence"
+            ),
+            "statistics": (
+                "Statistics",
+                "Review scan history and duplicate storage insights"
             ),
             "settings": (
                 "Settings",
@@ -2237,6 +2247,7 @@ class MainWindow(QMainWindow):
             ("dashboard", "Dashboard"),
             ("scan", "Scan Folders"),
             ("results", "Duplicate Results"),
+            ("statistics", "Statistics"),
             ("settings", "Settings")
         ]
 
@@ -2296,20 +2307,31 @@ class MainWindow(QMainWindow):
             lambda: self.navigate("scan")
         )
 
+        self.statistics_page = StatisticsPage(
+            self.statistics_manager
+        )
+
         self.settings_page = SettingsPage()
 
         self.pages = {
             "dashboard": self.dashboard,
             "scan": self.scan_page,
             "results": self.results_page,
+            "statistics": self.statistics_page,
             "settings": self.settings_page
         }
 
         for page in self.pages.values():
             self.stack.addWidget(page)
 
+        # Scan completed -> save scan statistics.
         self.scan_page.analysis_ready.connect(
             self.handle_analysis_ready
+        )
+
+        # Recycle Bin operation completed -> save recovered storage.
+        self.results_page.storage_recovered.connect(
+            self.handle_storage_recovered
         )
 
         content_layout.addWidget(self.stack)
@@ -2340,10 +2362,51 @@ class MainWindow(QMainWindow):
             button.style().unpolish(button)
             button.style().polish(button)
 
+        # Refresh statistics whenever the page is opened.
+        if page_name == "statistics":
+            self.statistics_page.refresh()
+
     # COMPLETE ANALYSIS RESULTS
 
     def handle_analysis_ready(self, report):
 
+        # Save scan history and refresh statistics.
+        try:
+            self.statistics_manager.record_scan(
+                report,
+                len(self.scan_page.records)
+            )
+
+            self.statistics_page.refresh()
+
+        except Exception as error:
+
+            QMessageBox.warning(
+                self,
+                "Statistics Warning",
+                f"Could not save scan statistics:\n{error}"
+            )
+
         self.results_page.display_report(report)
 
         self.navigate("results")
+
+    # ACTUAL RECOVERED STORAGE
+
+    def handle_storage_recovered(self, recovered_bytes):
+
+        try:
+            self.statistics_manager.record_recovered_storage(
+                recovered_bytes
+            )
+
+            self.statistics_page.refresh()
+
+        except Exception as error:
+
+            QMessageBox.warning(
+                self,
+                "Statistics Warning",
+                "Files were moved, but recovered-storage statistics "
+                f"could not be saved:\n{error}"
+            )

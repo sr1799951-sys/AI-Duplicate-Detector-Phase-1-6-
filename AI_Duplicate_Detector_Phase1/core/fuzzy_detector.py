@@ -12,7 +12,6 @@ from core.text_extractor import (
 
 
 # Minimum passage requirements.
-# Helps eliminate short headings and titles.
 MIN_PASSAGE_CHARS = 80
 MIN_PASSAGE_WORDS = 10
 
@@ -39,10 +38,6 @@ class FuzzyDuplicateWorker(QThread):
 
         self.excluded_pairs = excluded_pairs or set()
 
-    # -------------------------------------------------
-    # NORMALIZE FILE PAIRS
-    # -------------------------------------------------
-
     @staticmethod
     def path_pair(path_a, path_b):
 
@@ -55,10 +50,6 @@ class FuzzyDuplicateWorker(QThread):
         )
 
         return tuple(sorted((path_a, path_b)))
-
-    # -------------------------------------------------
-    # FILTER PASSAGES
-    # -------------------------------------------------
 
     @staticmethod
     def prepare_passages(passages):
@@ -78,7 +69,6 @@ class FuzzyDuplicateWorker(QThread):
             if not normalized_text:
                 continue
 
-            # Ignore short headings and titles.
             if len(original_text.strip()) < MIN_PASSAGE_CHARS:
                 continue
 
@@ -92,10 +82,9 @@ class FuzzyDuplicateWorker(QThread):
 
         return valid_passages
 
-    # -------------------------------------------------
-    # COMPARE DOCUMENT PASSAGES
-    # -------------------------------------------------
-
+    # Improved passage comparison.
+    # Token-set similarity handles reordered words and
+    # passages containing additional words more effectively.
     def compare_passages(
         self,
         passages_a,
@@ -123,10 +112,7 @@ class FuzzyDuplicateWorker(QThread):
 
         candidates = {}
 
-        # =============================================
-        # FORWARD COMPARISON
-        # =============================================
-
+        # Forward comparison
         for index_a, text_a in valid_a:
 
             if self.isInterruptionRequested():
@@ -135,7 +121,7 @@ class FuzzyDuplicateWorker(QThread):
             result = process.extractOne(
                 text_a,
                 choices_b,
-                scorer=fuzz.token_sort_ratio,
+                scorer=fuzz.token_set_ratio,
                 processor=None,
                 score_cutoff=self.threshold
             )
@@ -153,10 +139,7 @@ class FuzzyDuplicateWorker(QThread):
                     float(score)
                 )
 
-        # =============================================
-        # REVERSE COMPARISON
-        # =============================================
-
+        # Reverse comparison
         for index_b, text_b in valid_b:
 
             if self.isInterruptionRequested():
@@ -165,7 +148,7 @@ class FuzzyDuplicateWorker(QThread):
             result = process.extractOne(
                 text_b,
                 choices_a,
-                scorer=fuzz.token_sort_ratio,
+                scorer=fuzz.token_set_ratio,
                 processor=None,
                 score_cutoff=self.threshold
             )
@@ -183,10 +166,7 @@ class FuzzyDuplicateWorker(QThread):
                     float(score)
                 )
 
-        # =============================================
-        # SELECT ONE-TO-ONE MATCHING PASSAGES
-        # =============================================
-
+        # Select one-to-one passage matches
         ordered_candidates = sorted(
             [
                 (score, index_a, index_b)
@@ -224,10 +204,6 @@ class FuzzyDuplicateWorker(QThread):
 
         return matches
 
-    # -------------------------------------------------
-    # MAIN WORKER
-    # -------------------------------------------------
-
     def run(self):
 
         extracted_documents = []
@@ -240,10 +216,7 @@ class FuzzyDuplicateWorker(QThread):
 
         total_documents = len(self.records)
 
-        # =============================================
-        # STEP 1: EXTRACT DOCUMENT TEXT
-        # =============================================
-
+        # STEP 1: Extract document text
         for index, record in enumerate(self.records):
 
             if self.isInterruptionRequested():
@@ -282,10 +255,7 @@ class FuzzyDuplicateWorker(QThread):
                 f"Extracting: {record.name}"
             )
 
-        # =============================================
-        # STEP 2: COMPARE DOCUMENT PAIRS
-        # =============================================
-
+        # STEP 2: Compare document pairs
         total_pairs = (
             len(extracted_documents)
             * (len(extracted_documents) - 1)
@@ -321,7 +291,7 @@ class FuzzyDuplicateWorker(QThread):
 
                     comparisons_checked += 1
 
-                    # Skip exact duplicate document pairs.
+                    # Skip exact duplicate pairs
                     if pair in self.excluded_pairs:
 
                         self.progress_changed.emit(
@@ -373,19 +343,13 @@ class FuzzyDuplicateWorker(QThread):
                 if cancelled:
                     break
 
-        # =============================================
-        # STEP 3: SORT RESULTS
-        # =============================================
-
+        # STEP 3: Sort results
         matches.sort(
             key=lambda item: item["similarity"],
             reverse=True
         )
 
-        # =============================================
-        # STEP 4: RETURN FINAL REPORT
-        # =============================================
-
+        # STEP 4: Return report
         self.detection_completed.emit({
 
             "matches": matches,
