@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QFrame, QStackedWidget, QFileDialog,
     QListWidget, QMessageBox, QSpinBox, QCheckBox, QProgressBar,
     QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget,
-    QDialog, QTextEdit, QDialogButtonBox
+    QDialog, QTextEdit, QDialogButtonBox,QScrollArea,QSizePolicy
 )
 
 from core.scanner import FileScannerWorker
@@ -26,77 +26,254 @@ from core.file_manager import move_exact_duplicates_to_recycle_bin
 # =====================================================
 
 STYLE = """
-QMainWindow, QWidget {
-    background-color: #0b1220;
-    color: #e5e7eb;
-    font-family: Segoe UI;
+
+QMainWindow {
+    background-color: #f4f7fb;
+    color: #26364b;
+    font-family: "Segoe UI";
     font-size: 13px;
 }
+
+QWidget {
+    color: #26364b;
+    font-family: "Segoe UI";
+    font-size: 13px;
+}
+
+QLabel {
+    background-color: transparent;
+    border: none;
+}
+
+QWidget#CentralRoot {
+    background-color: #f4f7fb;
+}
+
+QWidget#MainContent {
+    background-color: #f4f7fb;
+}
+
+QWidget#DashboardPage,
+QWidget#ScanPage,
+QWidget#ResultsPage,
+QWidget#SettingsPage {
+    background-color: #f4f7fb;
+}
+
 QWidget#Sidebar {
-    background-color: #0a1020;
-    border-right: 1px solid #1e293b;
+    background-color: #ffffff;
+    border-right: 1px solid #e2e8f0;
 }
-QLabel#Brand { color: white; font-size: 19px; font-weight: bold; }
-QLabel#PageTitle { color: white; font-size: 26px; font-weight: bold; }
-QLabel#Section { color: white; font-size: 17px; font-weight: bold; }
-QLabel#HeroTitle { color: white; font-size: 26px; font-weight: bold; }
-QLabel#MetricValue { color: white; font-size: 27px; font-weight: bold; }
-QLabel#Muted { color: #94a3b8; }
-QFrame#Panel, QFrame#Metric, QFrame#Hero {
-    background-color: #111c2e;
-    border: 1px solid #26364d;
-    border-radius: 13px;
+
+QLabel#Brand {
+    color: #17345c;
+    font-size: 19px;
+    font-weight: bold;
 }
+
+QLabel#PageTitle {
+    color: #142b49;
+    font-size: 25px;
+    font-weight: bold;
+}
+
+QLabel#Section {
+    color: #1e3553;
+    font-size: 17px;
+    font-weight: bold;
+}
+
+QLabel#HeroTitle {
+    color: #15345b;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+QLabel#MetricValue {
+    color: #17345c;
+    font-size: 27px;
+    font-weight: bold;
+}
+
+QLabel#Muted {
+    color: #718096;
+}
+
+QLabel#PageEyebrow {
+    color: #2563eb;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QFrame#Panel,
+QFrame#Metric,
+QFrame#Hero {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+}
+
+QFrame#Hero {
+    background-color: #eaf2ff;
+    border: 1px solid #d5e4fb;
+}
+
+QFrame#Metric:hover,
+QFrame#Panel:hover {
+    border: 1px solid #93b4e8;
+}
+
 QPushButton {
     background-color: #2563eb;
-    color: white;
-    border: none;
+    color: #ffffff;
+    border: 1px solid #2563eb;
     border-radius: 8px;
-    padding: 10px 14px;
-    font-weight: bold;
+    padding: 10px 15px;
+    font-weight: 600;
 }
-QPushButton:hover { background-color: #1d4ed8; }
-QPushButton:disabled { background-color: #263449; color: #8290a5; }
+
+QPushButton:hover {
+    background-color: #1d4ed8;
+}
+
+QPushButton:disabled {
+    background-color: #e2e8f0;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+}
+
 QPushButton#Nav {
     background-color: transparent;
-    color: #aab7ca;
+    color: #53657d;
     text-align: left;
     border: none;
+    border-radius: 8px;
+    padding: 12px 13px;
 }
-QPushButton#Nav:hover { background-color: #172338; }
-QPushButton#Nav[active="true"] { background-color: #1d3a68; color: white; }
-QPushButton#Secondary { background-color: #172338; border: 1px solid #334155; }
-QListWidget, QSpinBox, QTableWidget, QTextEdit {
-    background-color: #0c1627;
-    color: white;
-    border: 1px solid #334155;
-    border-radius: 7px;
+
+QPushButton#Nav:hover {
+    background-color: #f0f5fc;
+    color: #1d4ed8;
+}
+
+QPushButton#Nav[active="true"] {
+    background-color: #e8f0ff;
+    color: #1d4ed8;
+    border-left: 3px solid #2563eb;
+}
+
+QPushButton#Secondary {
+    background-color: #ffffff;
+    color: #34465e;
+    border: 1px solid #d7e0ec;
+}
+
+QPushButton#Secondary:hover {
+    background-color: #f1f5f9;
+}
+
+QListWidget,
+QSpinBox,
+QTableWidget,
+QTextEdit {
+    background-color: #ffffff;
+    color: #26364b;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    padding: 7px;
+    selection-background-color: #dbeafe;
+    selection-color: #17345c;
+}
+
+QListWidget::item {
     padding: 7px;
 }
+
+QListWidget::item:selected {
+    background-color: #e8f0ff;
+    color: #1d4ed8;
+}
+
+QTableWidget {
+    alternate-background-color: #f7f9fc;
+    gridline-color: #e8edf4;
+}
+
 QHeaderView::section {
-    background-color: #172338;
-    color: #dbeafe;
-    padding: 8px;
+    background-color: #edf2f8;
+    color: #34465e;
+    padding: 10px;
     border: none;
+    border-bottom: 1px solid #dbe3ee;
     font-weight: bold;
 }
-QCheckBox { color: #e5e7eb; spacing: 9px; }
+
+QCheckBox {
+    color: #34465e;
+    spacing: 9px;
+}
+
 QProgressBar {
-    background-color: #0c1627;
-    border: 1px solid #334155;
+    background-color: #e8edf5;
+    border: 1px solid #d7e0ec;
     border-radius: 6px;
     height: 12px;
-    text-align: center;
 }
-QProgressBar::chunk { background-color: #2563eb; border-radius: 5px; }
-QTabWidget::pane { border: 1px solid #26364d; border-radius: 8px; }
+
+QProgressBar::chunk {
+    background-color: #3478e5;
+    border-radius: 5px;
+}
+
+QTabWidget::pane {
+    background-color: #ffffff;
+    border: 1px solid #dbe3ee;
+    border-radius: 9px;
+}
+
 QTabBar::tab {
-    background-color: #111c2e;
-    color: #94a3b8;
-    padding: 10px 16px;
-    border: 1px solid #26364d;
+    background-color: #edf2f8;
+    color: #64748b;
+    padding: 11px 17px;
+    border: 1px solid #e2e8f0;
 }
-QTabBar::tab:selected { background-color: #1d3a68; color: white; }
+
+QTabBar::tab:selected {
+    background-color: #ffffff;
+    color: #1d4ed8;
+    font-weight: bold;
+}
+/* Keep dashboard background consistent with light theme */
+QScrollArea {
+    background-color: #f4f7fb;
+    border: none;
+}
+
+QScrollArea > QWidget > QWidget#DashboardContent {
+    background-color: #f4f7fb;
+}
+
+QWidget#DashboardContent {
+    background-color: #f4f7fb;
+}
+
+QWidget#CentralRoot,
+QWidget#MainContent {
+    background-color: #f4f7fb;
+}
+
+QFrame#Hero {
+    background-color: #eaf2ff;
+    border: 1px solid #d5e4fb;
+    border-radius: 14px;
+}
+
+QFrame#Panel,
+QFrame#Metric {
+    background-color: #ffffff;
+}
+
+QTabBar::tab:selected { background-color: #ffffff; color: #1d4ed8; font-weight: bold; }
 """
 
 
@@ -140,112 +317,468 @@ class FileManagerWorker(QThread):
 # DASHBOARD
 # =====================================================
 
+
+# =====================================================
+# DASHBOARD
+# =====================================================
+
 class DashboardPage(QWidget):
 
-    def __init__(self, go_to_scan):
+    def __init__(self, go_to_scan, statistics_manager=None,
+                 go_to_results=None, go_to_statistics=None):
         super().__init__()
 
-        layout = QVBoxLayout(self)
-        layout.setSpacing(18)
+        self.go_to_scan = go_to_scan
+        self.statistics_manager = statistics_manager
+        self.go_to_results = go_to_results
+        self.go_to_statistics = go_to_statistics
+
+        self.metric_labels = {}
+
+        self.build_ui()
+        self.refresh()
+
+    def build_ui(self):
+
+        # Main dashboard layout
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        # Scrollable dashboard
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+
+        scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+
+        # Dashboard content container
+
+        content_widget = QWidget()
+        content_widget.setObjectName("DashboardContent")
+        content_widget.setStyleSheet(
+            "background-color: #f4f7fb;"
+        )
+        content_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Minimum
+        )
+
+        layout = QVBoxLayout(content_widget)
+        layout.setContentsMargins(4, 4, 12, 15)
+        layout.setSpacing(20)
+
+        scroll.setWidget(content_widget)
+        outer_layout.addWidget(scroll)
+
+        # =============================================
+        # HERO / INTRODUCTION CARD
+        # =============================================
 
         hero = QFrame()
         hero.setObjectName("Hero")
+
+        hero.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Minimum
+        )
+
         hero_layout = QHBoxLayout(hero)
+
+        hero_layout.setContentsMargins(
+            26, 24, 26, 24
+        )
+
+        hero_layout.setSpacing(20)
+
+        # Introduction text
         text_layout = QVBoxLayout()
+        text_layout.setSpacing(10)
 
-        eyebrow = QLabel("LOCAL DOCUMENT INTELLIGENCE")
-        eyebrow.setObjectName("Muted")
+        eyebrow = QLabel(
+            "AI-POWERED DOCUMENT INTELLIGENCE"
+        )
+        eyebrow.setObjectName("PageEyebrow")
+        eyebrow.setWordWrap(True)
 
-        title = QLabel("Your files, less cluttered.")
+        title = QLabel(
+            "A clearer view of your files."
+        )
         title.setObjectName("HeroTitle")
+        title.setWordWrap(True)
 
         description = QLabel(
-            "Find identical copies, repeated passages, and documents "
-            "with similar meanings."
+            "Find identical files, discover repeated passages, "
+            "and identify documents with similar meaning — "
+            "all from one workspace."
         )
+
         description.setObjectName("Muted")
         description.setWordWrap(True)
+
+        description.setMinimumWidth(0)
 
         text_layout.addWidget(eyebrow)
         text_layout.addWidget(title)
         text_layout.addWidget(description)
+
         hero_layout.addLayout(text_layout, 1)
 
-        scan_button = QPushButton("Choose folders")
-        scan_button.clicked.connect(go_to_scan)
-        hero_layout.addWidget(scan_button)
+        # Start scan button
+        scan_button = QPushButton(
+            "＋  Start a new scan"
+        )
+        scan_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2563eb;
+                color: white;
+                border: none;
+                border-radius: 9px;
+                padding: 13px 20px;
+                font-size: 14px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #1d4ed8;
+            }
+            QPushButton:pressed {
+                background-color: #1e40af;
+            }
+        """)
+
+        scan_button.setMinimumHeight(46)
+        scan_button.setMinimumWidth(175)
+
+        scan_button.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Fixed
+        )
+
+        scan_button.clicked.connect(
+            self.go_to_scan
+        )
+
+        hero_layout.addWidget(
+            scan_button,
+            0,
+            Qt.AlignmentFlag.AlignVCenter
+        )
+
         layout.addWidget(hero)
 
-        heading = QLabel("Workspace Overview")
-        heading.setObjectName("Section")
-        layout.addWidget(heading)
+        # =============================================
+        # WORKSPACE OVERVIEW
+        # =============================================
 
+        overview_header = QHBoxLayout()
+
+        overview_title = QLabel(
+            "Workspace overview"
+        )
+        overview_title.setObjectName("Section")
+
+        overview_hint = QLabel(
+            "Updated from your saved scan history"
+        )
+        overview_hint.setObjectName("Muted")
+        overview_hint.setWordWrap(True)
+
+        overview_header.addWidget(overview_title)
+        overview_header.addStretch()
+        overview_header.addWidget(overview_hint)
+
+        layout.addLayout(overview_header)
+
+        # Metric cards
         grid = QGridLayout()
-        grid.setSpacing(12)
+        grid.setSpacing(13)
 
-        for index, (value, name) in enumerate([
-            ("0", "FILES INDEXED"),
-            ("0", "DUPLICATE GROUPS"),
-            ("—", "SPACE REVIEWABLE")
-        ]):
+        metric_specs = [
+            ("0", "FILES SCANNED", "files", "#2563eb"),
+            ("0", "EXACT DUPLICATE GROUPS", "groups", "#7c3aed"),
+            ("0", "PARTIAL + AI MATCHES", "matches", "#0891b2"),
+            ("0 B", "STORAGE RECOVERED", "recovered", "#059669"),
+        ]
+
+        for index, (value, caption, key, accent) in enumerate(
+            metric_specs
+        ):
+
             card = QFrame()
             card.setObjectName("Metric")
+
+            card.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Minimum
+            )
+
             card_layout = QVBoxLayout(card)
+
+            card_layout.setContentsMargins(
+                17, 15, 17, 15
+            )
+
+            card_layout.setSpacing(7)
+
+            accent_line = QFrame()
+            accent_line.setFixedHeight(4)
+
+            accent_line.setStyleSheet(
+                f"""
+                background-color: {accent};
+                border: none;
+                border-radius: 2px;
+                """
+            )
 
             value_label = QLabel(value)
             value_label.setObjectName("MetricValue")
 
-            name_label = QLabel(name)
-            name_label.setObjectName("Muted")
+            caption_label = QLabel(caption)
+            caption_label.setObjectName("Muted")
+            caption_label.setWordWrap(True)
 
+            card_layout.addWidget(accent_line)
+            card_layout.addSpacing(4)
             card_layout.addWidget(value_label)
-            card_layout.addWidget(name_label)
-            grid.addWidget(card, 0, index)
+            card_layout.addWidget(caption_label)
+
+            self.metric_labels[key] = value_label
+
+            grid.addWidget(
+                card,
+                index // 4,
+                index % 4
+            )
 
         layout.addLayout(grid)
 
-        heading = QLabel("Detection Technology")
-        heading.setObjectName("Section")
-        layout.addWidget(heading)
+        # =============================================
+        # DETECTION TECHNOLOGY
+        # =============================================
 
-        feature_layout = QHBoxLayout()
+        section = QLabel(
+            "Detection technology"
+        )
+        section.setObjectName("Section")
+
+        layout.addWidget(section)
 
         features = [
-            ("Exact Detection", "SHA-256 hashing", "PHASE 4"),
-            ("Partial Detection", "RapidFuzz text matching", "PHASE 5"),
-            ("Semantic Detection", "Sentence Transformers AI", "PHASE 6")
+            (
+                "01",
+                "Exact detection",
+                "SHA-256 fingerprinting",
+                "Identifies byte-for-byte identical files.",
+                "#2563eb"
+            ),
+            (
+                "02",
+                "Partial detection",
+                "RapidFuzz text matching",
+                "Finds overlapping or closely worded passages.",
+                "#0891b2"
+            ),
+            (
+                "03",
+                "Semantic AI",
+                "Sentence Transformers",
+                "Finds passages that express similar meanings.",
+                "#7c3aed"
+            )
         ]
 
-        for name, detail_text, phase in features:
+        feature_row = QHBoxLayout()
+        feature_row.setSpacing(13)
+
+        for number, name, method, detail, accent in features:
+
             card = create_panel()
+
+            card.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Minimum
+            )
+
             card_layout = QVBoxLayout(card)
 
-            feature_title = QLabel(name)
-            feature_title.setObjectName("Section")
+            card_layout.setContentsMargins(
+                16, 15, 16, 15
+            )
 
-            detail = QLabel(detail_text)
-            detail.setObjectName("Muted")
-            detail.setWordWrap(True)
+            card_layout.setSpacing(8)
 
-            phase_label = QLabel(phase)
-            phase_label.setObjectName("Muted")
+            number_label = QLabel(number)
 
-            card_layout.addWidget(feature_title)
-            card_layout.addWidget(detail)
-            card_layout.addStretch()
-            card_layout.addWidget(phase_label)
+            number_label.setStyleSheet(
+                f"""
+                color: {accent};
+                font-size: 12px;
+                font-weight: bold;
+                """
+            )
 
-            feature_layout.addWidget(card)
+            name_label = QLabel(name)
+            name_label.setObjectName("Section")
+            name_label.setWordWrap(True)
 
-        layout.addLayout(feature_layout)
+            method_label = QLabel(method)
+
+            method_label.setStyleSheet(
+                f"""
+                color: {accent};
+                font-weight: 600;
+                """
+            )
+
+            method_label.setWordWrap(True)
+
+            detail_label = QLabel(detail)
+            detail_label.setObjectName("Muted")
+            detail_label.setWordWrap(True)
+
+            card_layout.addWidget(number_label)
+            card_layout.addWidget(name_label)
+            card_layout.addWidget(method_label)
+            card_layout.addWidget(detail_label)
+
+            feature_row.addWidget(card, 1)
+
+        layout.addLayout(feature_row)
+
+        # =============================================
+        # QUICK ACTIONS
+        # =============================================
+
+        actions = QHBoxLayout()
+        actions.setSpacing(12)
+
+        results_button = QPushButton(
+            "View duplicate results"
+        )
+
+        results_button.setObjectName("Secondary")
+
+        if self.go_to_results:
+            results_button.clicked.connect(
+                self.go_to_results
+            )
+        else:
+            results_button.setEnabled(False)
+
+        stats_button = QPushButton(
+            "Open statistics"
+        )
+
+        stats_button.setObjectName("Secondary")
+
+        if self.go_to_statistics:
+            stats_button.clicked.connect(
+                self.go_to_statistics
+            )
+        else:
+            stats_button.setEnabled(False)
+
+        actions.addWidget(results_button)
+        actions.addWidget(stats_button)
+        actions.addStretch()
+
+        layout.addLayout(actions)
+
+        # =============================================
+        # PRIVACY FOOTER
+        # =============================================
 
         privacy = QLabel(
-            "Privacy first: document analysis runs locally on your computer."
+            "Privacy first  •  Local document analysis  •  "
+            "Safe Recycle Bin management"
         )
+
         privacy.setObjectName("Muted")
+        privacy.setWordWrap(True)
+
         layout.addWidget(privacy)
+
         layout.addStretch()
 
+    # =============================================
+    # STORAGE SIZE FORMATTER
+    # =============================================
+
+    @staticmethod
+    def format_size(size_bytes):
+
+        value = max(
+            0,
+            int(size_bytes or 0)
+        )
+
+        for unit in ("B", "KB", "MB", "GB", "TB"):
+
+            if value < 1024 or unit == "TB":
+                return f"{value:.1f} {unit}"
+
+            value /= 1024
+
+        return f"{value:.1f} TB"
+
+    # =============================================
+    # REFRESH DASHBOARD STATISTICS
+    # =============================================
+
+    def refresh(self):
+
+        if self.statistics_manager is None:
+            return
+
+        try:
+
+            summary = (
+                self.statistics_manager.get_summary()
+            )
+
+            exact_groups = int(
+                summary.get("exact_groups", 0) or 0
+            )
+
+            partial = int(
+                summary.get("partial_matches", 0) or 0
+            )
+
+            semantic = int(
+                summary.get("semantic_matches", 0) or 0
+            )
+
+            recovered = int(
+                summary.get("storage_recovered_bytes", 0) or 0
+            )
+
+            values = {
+
+                "files": f"{int(summary.get('total_files_scanned', 0) or 0):,}",
+
+                "groups": f"{exact_groups:,}",
+
+                "matches": f"{partial + semantic:,}",
+
+                "recovered": self.format_size(recovered)
+
+            }
+
+            for key, value in values.items():
+
+                self.metric_labels[key].setText(value)
+
+        except Exception:
+
+            # Keep dashboard available if statistics are unavailable.
+            pass
 
 # =====================================================
 # SCAN PAGE
@@ -382,11 +915,17 @@ class ScanPage(QWidget):
     @staticmethod
     def configure_table(table):
 
-        table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
+        header = table.horizontalHeader()
+
+        header.setSectionResizeMode(
+            QHeaderView.ResizeMode.Interactive
         )
 
+        header.setStretchLastSection(True)
+        header.setMinimumSectionSize(80)
+
         table.verticalHeader().setVisible(False)
+        table.verticalHeader().setDefaultSectionSize(42)
 
         table.setEditTriggers(
             QTableWidget.EditTrigger.NoEditTriggers
@@ -396,7 +935,28 @@ class ScanPage(QWidget):
             QTableWidget.SelectionBehavior.SelectRows
         )
 
+        table.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+
         table.setAlternatingRowColors(True)
+        table.setWordWrap(False)
+        table.setMinimumHeight(300)
+
+        table.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+
+        table.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+
+        # Discovered files: name, type, size, modified, location
+        widths = [210, 85, 110, 160, 350]
+
+        for column, width in enumerate(widths):
+            if column < table.columnCount():
+                table.setColumnWidth(column, width)
 
     # FOLDER SELECTION
 
@@ -1235,11 +1795,17 @@ class ResultsPage(QWidget):
     @staticmethod
     def configure_table(table):
 
-        table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
+        header = table.horizontalHeader()
+
+        header.setSectionResizeMode(
+            QHeaderView.ResizeMode.Interactive
         )
 
+        header.setStretchLastSection(True)
+        header.setMinimumSectionSize(80)
+
         table.verticalHeader().setVisible(False)
+        table.verticalHeader().setDefaultSectionSize(46)
 
         table.setEditTriggers(
             QTableWidget.EditTrigger.NoEditTriggers
@@ -1249,7 +1815,35 @@ class ResultsPage(QWidget):
             QTableWidget.SelectionBehavior.SelectRows
         )
 
+        table.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+
         table.setAlternatingRowColors(True)
+        table.setWordWrap(False)
+        table.setMinimumHeight(350)
+
+        table.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+
+        table.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+
+        # Custom widths for each results table.
+        widths_by_columns = {
+            5: [110, 200, 110, 180, 400],
+            6: [180, 180, 105, 130, 90, 400]
+        }
+
+        widths = widths_by_columns.get(
+            table.columnCount(),
+            [180] * table.columnCount()
+        )
+
+        for column, width in enumerate(widths):
+            table.setColumnWidth(column, width)
 
     @staticmethod
     def format_size(size):
@@ -1716,29 +2310,29 @@ class ResultsPage(QWidget):
         return f"""
         <html>
         <body style="
-            background-color:#0c1627;
-            color:#e5e7eb;
+            background-color:#ffffff;
+            color:#26364b;
             font-family:Segoe UI;
             font-size:13px;
         ">
             <div style="
-                background-color:#17452f;
-                border:1px solid #3b8260;
+                background-color:#e8f5ee;
+                border:1px solid #b7dfc7;
                 border-radius:7px;
                 padding:10px;
                 margin-bottom:10px;
             ">
-                <b style="color:#bbf7d0;">
+                <b style="color:#17633b;">
                     MATCH {match_number}
                 </b>
-                <span style="color:#bbf7d0;">
+                <span style="color:#17633b;">
                     &nbsp; | &nbsp; Similarity: {safe_score}
                 </span>
             </div>
             <div style="white-space:pre-wrap; line-height:1.5;">
                 <span style="
-                    background-color:#365d36;
-                    color:#ffffff;
+                    background-color:#d9f0e2;
+                    color:#17452f;
                     padding:2px;
                 ">{safe_text}</span>
             </div>
@@ -1856,13 +2450,13 @@ class ResultsPage(QWidget):
         file_b_area.setAcceptRichText(True)
 
         file_a_area.setStyleSheet(
-            "QTextEdit { background-color:#0c1627; color:#e5e7eb; "
-            "border:1px solid #3b8260; border-radius:7px; padding:8px; }"
+            "QTextEdit { background-color:#ffffff; color:#26364b; "
+            "border:1px solid #cbd8e7; border-radius:7px; padding:8px; }"
         )
 
         file_b_area.setStyleSheet(
-            "QTextEdit { background-color:#0c1627; color:#e5e7eb; "
-            "border:1px solid #3b8260; border-radius:7px; padding:8px; }"
+            "QTextEdit { background-color:#ffffff; color:#26364b; "
+            "border:1px solid #cbd8e7; border-radius:7px; padding:8px; }"
         )
 
         if passages:
@@ -2229,7 +2823,7 @@ class MainWindow(QMainWindow):
 
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(220)
+        sidebar.setFixedWidth(238)
 
         sidebar_layout = QVBoxLayout(sidebar)
 
@@ -2277,8 +2871,9 @@ class MainWindow(QMainWindow):
         content_layout = QVBoxLayout(content)
 
         content_layout.setContentsMargins(
-            28, 24, 28, 24
+            30, 25, 30, 25
         )
+        content_layout.setSpacing(18)
 
         header = QVBoxLayout()
 
@@ -2298,7 +2893,10 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
 
         self.dashboard = DashboardPage(
-            lambda: self.navigate("scan")
+            lambda: self.navigate("scan"),
+            self.statistics_manager,
+            lambda: self.navigate("results"),
+            lambda: self.navigate("statistics")
         )
 
         self.scan_page = ScanPage()
@@ -2365,6 +2963,8 @@ class MainWindow(QMainWindow):
         # Refresh statistics whenever the page is opened.
         if page_name == "statistics":
             self.statistics_page.refresh()
+        elif page_name == "dashboard":
+            self.dashboard.refresh()
 
     # COMPLETE ANALYSIS RESULTS
 
